@@ -1,6 +1,7 @@
 using System.Globalization;
 using CsvHelper;
 using Dpp.Api.Dtos;
+using Dpp.Api.Validators;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dpp.Api.Controllers;
@@ -38,19 +39,39 @@ public class ProductsController : ControllerBase
             csv.ValidateHeader<ProductCsvRow>();
 
             var rows = new List<ProductCsvRow>();
+            var errors = new List<CsvRowError>();
+            var rowCount = 0;
 
             while (await csv.ReadAsync())
             {
                 var row = csv.GetRecord<ProductCsvRow>();
                 row.RowNumber = csv.Parser.Row;
+                rowCount++;
+
+                var gtinError = GtinValidator.GetError(row.Gtin);
+
+                if (gtinError is not null)
+                {
+                    errors.Add(new CsvRowError
+                    {
+                        RowNumber = row.RowNumber,
+                        Messages = [gtinError]
+                    });
+
+                    continue;
+                }
+
                 rows.Add(row);
             }
 
             return Ok(new
             {
-                message = "CSV okundu. Kayıtlar henüz doğrulanmadı veya kaydedilmedi.",
-                rowCount = rows.Count,
-                rows
+                message = "GTIN doğrulaması tamamlandı. Diğer alanlar henüz doğrulanmadı; kayıt yapılmadı.",
+                rowCount,
+                validGtinCount = rows.Count,
+                rejectedCount = errors.Count,
+                rows,
+                errors
             });
         }
         catch (HeaderValidationException)

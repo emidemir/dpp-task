@@ -55,8 +55,8 @@ Entity sınıfları ve `AppDbContext` eklendi. SQLite bağlantısı ve uygulamay
 `DbContext` kaydı yapılandırıldı. `InitialCreate` migration'ı oluşturuldu.
 Veritabanını hazırlamak için aşağıdaki migration uygulama komutunu çalıştırın.
 `POST /api/products/import` endpoint'i CSV başlıklarını kontrol eder ve kayıtları
-satır numaralarıyla okur. Alan değerlerinin doğrulanması, veritabanına kayıt
-ve DPP çıktıları henüz uygulanmadı.
+satır numaralarıyla okur. GTIN doğrulaması uygulanmıştır; diğer alanların
+doğrulanması, veritabanına kayıt ve DPP çıktıları henüz uygulanmadı.
 
 ### Veritabanı yapılandırması
 
@@ -113,12 +113,32 @@ gtin,model_adi,batch_no,elyaf_pamuk_yuzde,elyaf_elastan_yuzde,uretim_yeri,karbon
 ```
 
 Dosya eksikse, boşsa, gerekli başlıkları içermiyorsa veya CSV yapısı
-okunamıyorsa HTTP 400 döner. Okunabilen kayıtlar, HTTP 200 yanıtındaki `rows`
-alanında, sayıları da `rowCount` alanında döner. Başlık satırı 1. satırdır;
-örnek dosyadaki beş kayıt 2–6 numaralarıyla döner.
+okunamıyorsa HTTP 400 döner. CSV okunabildiğinde HTTP 200 döner. Yanıtta:
+
+- `rowCount`: Okunan toplam veri kaydı sayısı.
+- `validGtinCount`: GTIN kontrolünü geçen kayıt sayısı.
+- `rejectedCount`: GTIN nedeniyle reddedilen kayıt sayısı.
+- `rows`: GTIN kontrolünü geçen kayıtlar.
+- `errors`: Hatalı kayıtların `rowNumber` ve `messages` alanları.
+
+Başlık satırı 1. satırdır. Örnek dosyada 5 kayıt okunur; 4 kayıt GTIN kontrolünü
+geçer, 4. satırdaki boş GTIN nedeniyle 1 kayıt reddedilir. Hatalı GTIN diğer
+kayıtların işlenmesini durdurmaz.
 
 `Dtos/ProductCsvRow.cs`, CSV sütunlarını C# alanlarına eşler. Sayısal alanlar
 dahil bütün CSV değerleri bu aşamada metin olarak tutulur; GTIN'in başındaki
-sıfırlar korunur. Alan değerleri henüz doğrulanmaz ve veritabanına kayıt
-yapılmaz. Bu nedenle örnek dosyadaki boş GTIN ve hatalı elyaf toplamı da
-şimdilik okunur; HTTP 200 yanıtı kayıtların geçerli olduğu anlamına gelmez.
+sıfırlar korunur. Veritabanına kayıt yapılmaz. Örnek dosyanın 5. satırındaki
+hatalı elyaf toplamı bu aşamada henüz kontrol edilmez; GTIN kontrolünü geçen
+bir kayıt tüm ödev kurallarını geçmiş sayılmaz.
+
+### GTIN doğrulaması
+
+`Validators/GtinValidator.cs`, GTIN'in boş olmamasını, tam olarak 14 adet
+ASCII rakamından (`0`–`9`) oluşmasını ve GS1 kontrol basamağını doğrular.
+GTIN metni sayıya dönüştürülmez ve baştaki sıfırlar korunur.
+
+GTIN-14'ün ilk 13 rakamı soldan sırayla 3 ve 1 ile çarpılarak toplanır.
+Beklenen son rakam `(10 - toplam % 10) % 10` formülüyle hesaplanır ve
+14. rakamla karşılaştırılır. Algoritma, [GS1 kontrol basamağı
+açıklamasını](https://www.gs1uk.org/knowledge-hub/standards/what-is-a-check-digit)
+temel alır.
