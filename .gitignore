@@ -2,6 +2,12 @@
 **/bin/
 **/obj/
 
+# Yerel SQLite veritabanı ve yardımcı dosyaları
+**/dpp.db
+**/dpp.db-shm
+**/dpp.db-wal
+**/dpp.db-journal
+
 # Frontend bağımlılıkları ve derleme çıktıları
 **/node_modules/
 **/dist/
