@@ -11,4 +11,6 @@ public class ProductModel
     public decimal CottonPercentage { get; set; }
 
     public decimal ElastanePercentage { get; set; }
+
+    public ICollection<Batch> Batches { get; set; } = [];
 }
