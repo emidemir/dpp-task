@@ -1,0 +1,17 @@
+# .NET derleme çıktıları
+**/bin/
+**/obj/
+
+# Frontend bağımlılıkları ve derleme çıktıları
+**/node_modules/
+**/dist/
+
+# Yerel ortam ayarları
+.env
+.env.*
+!.env.example
+
+# Yerel editör ve işletim sistemi dosyaları
+.vs/
+.idea/
+.DS_Store
