@@ -1,3 +1,6 @@
+using System.Globalization;
+using CsvHelper;
+using Dpp.Api.Dtos;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Dpp.Api.Controllers;
@@ -8,7 +11,7 @@ public class ProductsController : ControllerBase
 {
     [HttpPost("import")]
     [Consumes("multipart/form-data")]
-    public IActionResult Import([FromForm] IFormFile? file)
+    public async Task<IActionResult> Import([FromForm] IFormFile? file)
     {
         if (file is null || file.Length == 0)
         {
@@ -18,11 +21,52 @@ public class ProductsController : ControllerBase
             });
         }
 
-        return Ok(new
+        using var reader = new StreamReader(file.OpenReadStream());
+        using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+
+        try
         {
-            message = "Dosya alındı. CSV içeriği henüz işlenmedi.",
-            fileName = file.FileName,
-            size = file.Length
-        });
+            if (!await csv.ReadAsync())
+            {
+                return BadRequest(new
+                {
+                    message = "CSV dosyası başlık satırı içermelidir."
+                });
+            }
+
+            csv.ReadHeader();
+            csv.ValidateHeader<ProductCsvRow>();
+
+            var rows = new List<ProductCsvRow>();
+
+            while (await csv.ReadAsync())
+            {
+                var row = csv.GetRecord<ProductCsvRow>();
+                row.RowNumber = csv.Parser.Row;
+                rows.Add(row);
+            }
+
+            return Ok(new
+            {
+                message = "CSV okundu. Kayıtlar henüz doğrulanmadı veya kaydedilmedi.",
+                rowCount = rows.Count,
+                rows
+            });
+        }
+        catch (HeaderValidationException)
+        {
+            return BadRequest(new
+            {
+                message = "CSV başlıkları eksik veya hatalı. Örnek dosyadaki sütun adlarını kullanın."
+            });
+        }
+        catch (CsvHelperException)
+        {
+            return BadRequest(new
+            {
+                rowNumber = csv.Parser.Row,
+                message = "CSV satırı okunamadı. Alan sayısını ve tırnak kullanımını kontrol edin."
+            });
+        }
     }
 }
