@@ -1,8 +1,11 @@
 using System.Globalization;
 using CsvHelper;
+using Dpp.Api.Data;
 using Dpp.Api.Dtos;
+using Dpp.Api.Models;
 using Dpp.Api.Validators;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dpp.Api.Controllers;
 
@@ -10,6 +13,13 @@ namespace Dpp.Api.Controllers;
 [Route("api/products")]
 public class ProductsController : ControllerBase
 {
+    private readonly AppDbContext _context;
+
+    public ProductsController(AppDbContext context)
+    {
+        _context = context;
+    }
+
     [HttpPost("import")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> Import([FromForm] IFormFile? file)
@@ -64,11 +74,17 @@ public class ProductsController : ControllerBase
                 rows.Add(row);
             }
 
+            foreach (var row in rows)
+            {
+                await SaveRowAsync(row);
+            }
+
             return Ok(new
             {
-                message = "CSV doğrulaması tamamlandı. Kayıtlar henüz veritabanına kaydedilmedi.",
+                message = "CSV işlendi. Geçerli kayıtlar veritabanına kaydedildi.",
                 rowCount,
                 validCount = rows.Count,
+                savedCount = rows.Count,
                 rejectedCount = errors.Count,
                 rows,
                 errors
@@ -89,5 +105,50 @@ public class ProductsController : ControllerBase
                 message = "CSV satırı okunamadı. Alan sayısını ve tırnak kullanımını kontrol edin."
             });
         }
+    }
+
+    private async Task SaveRowAsync(ProductCsvRow row)
+    {
+        var model = await _context.ProductModels
+            .Include(model => model.Batches)
+            .SingleOrDefaultAsync(model => model.Gtin == row.Gtin);
+
+        if (model is null)
+        {
+            model = new ProductModel
+            {
+                Gtin = row.Gtin,
+                Name = row.ModelName.Trim()
+            };
+
+            _context.ProductModels.Add(model);
+        }
+
+        model.Name = row.ModelName.Trim();
+        model.CottonPercentage = decimal.Parse(
+            row.CottonPercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
+        model.ElastanePercentage = decimal.Parse(
+            row.ElastanePercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+        var batchNumber = row.BatchNumber.Trim();
+        var batch = model.Batches.SingleOrDefault(batch => batch.BatchNumber == batchNumber);
+
+        if (batch is null)
+        {
+            batch = new Batch
+            {
+                BatchNumber = batchNumber,
+                ProductionPlace = row.ProductionPlace.Trim(),
+                ProductModel = model
+            };
+
+            model.Batches.Add(batch);
+        }
+
+        batch.ProductionPlace = row.ProductionPlace.Trim();
+        batch.CarbonKgCo2e = decimal.Parse(
+            row.CarbonKgCo2e, NumberStyles.Float, CultureInfo.InvariantCulture);
+
+        await _context.SaveChangesAsync();
     }
 }

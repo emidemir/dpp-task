@@ -37,6 +37,12 @@ dotnet tool restore
   kapsayan model ailesini temsil etmez.
 - Aynı GTIN farklı üretim partilerinde kullanılabileceği için model–batch
   ilişkisi bire çok kurulmuştur. Batch, ilgili ürün tipinin üretim partisidir.
+- İçe aktarmada model GTIN ile, batch ise bağlı olduğu model ve batch
+  numarasıyla eşleştirilir. Olmayan kayıt oluşturulur; mevcut kayıt güncellenir.
+  Aynı dosyanın sıralı tekrar yüklemeleri yeni model veya batch satırları üretmez.
+- Aynı GTIN için son geçerli CSV satırı model adını ve elyaf yüzdelerini
+  belirler. Bu alanlar modelin bütün batch'leri için ortaktır. Mevcut batch'in
+  üretim yeri ve karbon değeri güncellenir. Önceki sürümler saklanmaz.
 
 ### Derleme
 
@@ -56,7 +62,8 @@ Entity sınıfları ve `AppDbContext` eklendi. SQLite bağlantısı ve uygulamay
 Veritabanını hazırlamak için aşağıdaki migration uygulama komutunu çalıştırın.
 `POST /api/products/import` endpoint'i CSV başlıklarını kontrol eder ve kayıtları
 satır numaralarıyla okur. GTIN, elyaf yüzdeleri, zorunlu metin alanları ve karbon
-değeri doğrulanır. Veritabanına kayıt ve DPP çıktıları henüz uygulanmadı.
+değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir. DPP çıktıları
+henüz uygulanmadı.
 
 ### Veritabanı yapılandırması
 
@@ -117,6 +124,8 @@ okunamıyorsa HTTP 400 döner. CSV okunabildiğinde HTTP 200 döner. Yanıtta:
 
 - `rowCount`: Okunan toplam veri kaydı sayısı.
 - `validCount`: Alan doğrulamalarını geçen kayıt sayısı.
+- `savedCount`: Model ve batch bilgileri kaydedilen geçerli satır sayısı;
+  yeni eklenen kayıt sayısı değildir, mevcut kayıtlar da bu sayıya dahildir.
 - `rejectedCount`: Bu kontroller nedeniyle reddedilen kayıt sayısı.
 - `rows`: Mevcut kontrolleri geçen kayıtlar.
 - `errors`: Hatalı kayıtların `rowNumber` ve `messages` alanları.
@@ -128,7 +137,27 @@ listesinde toplanır. Hatalı satırlar diğer kayıtların işlenmesini durdurm
 
 `Dtos/ProductCsvRow.cs`, CSV sütunlarını C# alanlarına eşler. Sayısal alanlar
 dahil bütün CSV değerleri bu aşamada metin olarak tutulur; GTIN'in başındaki
-sıfırlar korunur. Alan doğrulamasını geçen kayıtlar henüz veritabanına kaydedilmez.
+sıfırlar korunur. Doğrulama bittikten sonra geçerli satırlar model ve batch
+entity'lerine dönüştürülerek kaydedilir. Metin alanlarının başındaki ve sonundaki
+boşluklar temizlenir; GTIN aynen korunur. Sayısal değerler doğrulamayla aynı
+`NumberStyles.Float` ve `InvariantCulture` ayarlarıyla `decimal` tipine çevrilir.
+Her satırın model ve batch değişiklikleri aynı `SaveChangesAsync` çağrısında
+kaydedilir. Yanıt `rows` alanında CSV'den okunan metin değerlerini gösterir.
+CSV yapısı okunamazsa HTTP 400 dönülür ve bu yüklemeden kayıt yapılmaz.
+
+Boş bir veritabanında örnek CSV'nin ilk yüklemesi 3 model ve 3 batch oluşturur;
+`savedCount: 3` ve `rejectedCount: 2` döner. Aynı CSV tekrar yüklendiğinde
+bu sayılar değişmez; mevcut model ve batch'ler kullanılır.
+
+SQLite komut satırı aracı kuruluysa, `backend/` dizininden kayıt sayılarını
+kontrol edebilirsiniz:
+
+```bash
+sqlite3 dpp.db "SELECT (SELECT COUNT(*) FROM ProductModels) AS models, (SELECT COUNT(*) FROM Batches) AS batches;"
+```
+
+Yalnızca örnek CSV yüklendiyse beklenen sonuç `3|3` değeridir. Uygulama yeniden
+başlatıldığında kayıtlar korunur.
 
 ### GTIN doğrulaması
 
@@ -174,4 +203,6 @@ CSV
 Beklenen sonuç: `rowCount: 3`, `validCount: 1`, `rejectedCount: 2`.
 2. satırda üç zorunlu alan ve sayısal olmayan karbon için dört hata,
 3. satırda negatif karbon için bir hata döner. 4. satırdaki sıfır karbon
-değeri kabul edilir. Bu istek de henüz veritabanına kayıt yapmaz.
+değeri kabul edilir ve `B-ZERO` batch'iyle veritabanına kaydedilir. Bu nedenle
+bu test de çalıştırıldıysa toplam batch sayısı, yalnızca örnek CSV'nin
+yüklendiği durumdan farklı olur.
