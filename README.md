@@ -55,8 +55,8 @@ Entity sınıfları ve `AppDbContext` eklendi. SQLite bağlantısı ve uygulamay
 `DbContext` kaydı yapılandırıldı. `InitialCreate` migration'ı oluşturuldu.
 Veritabanını hazırlamak için aşağıdaki migration uygulama komutunu çalıştırın.
 `POST /api/products/import` endpoint'i CSV başlıklarını kontrol eder ve kayıtları
-satır numaralarıyla okur. GTIN ve elyaf yüzdelerinin doğrulanması uygulanmıştır;
-diğer alanların doğrulanması, veritabanına kayıt ve DPP çıktıları henüz uygulanmadı.
+satır numaralarıyla okur. GTIN, elyaf yüzdeleri, zorunlu metin alanları ve karbon
+değeri doğrulanır. Veritabanına kayıt ve DPP çıktıları henüz uygulanmadı.
 
 ### Veritabanı yapılandırması
 
@@ -116,21 +116,19 @@ Dosya eksikse, boşsa, gerekli başlıkları içermiyorsa veya CSV yapısı
 okunamıyorsa HTTP 400 döner. CSV okunabildiğinde HTTP 200 döner. Yanıtta:
 
 - `rowCount`: Okunan toplam veri kaydı sayısı.
-- `validCount`: Mevcut GTIN ve elyaf kontrollerini geçen kayıt sayısı.
+- `validCount`: Alan doğrulamalarını geçen kayıt sayısı.
 - `rejectedCount`: Bu kontroller nedeniyle reddedilen kayıt sayısı.
 - `rows`: Mevcut kontrolleri geçen kayıtlar.
 - `errors`: Hatalı kayıtların `rowNumber` ve `messages` alanları.
 
 Başlık satırı 1. satırdır. Örnek dosyada 5 kayıt okunur; 3 kayıt kontrolleri geçer.
 4. satırdaki boş GTIN ve 5. satırdaki yüzde toplamının 98 olması nedeniyle
-2 kayıt reddedilir. Bir satırdaki GTIN ve elyaf hataları aynı `messages`
+2 kayıt reddedilir. Bir satırdaki bütün alan hataları aynı `messages`
 listesinde toplanır. Hatalı satırlar diğer kayıtların işlenmesini durdurmaz.
 
 `Dtos/ProductCsvRow.cs`, CSV sütunlarını C# alanlarına eşler. Sayısal alanlar
 dahil bütün CSV değerleri bu aşamada metin olarak tutulur; GTIN'in başındaki
-sıfırlar korunur. Veritabanına kayıt yapılmaz. Model adı, batch numarası,
-üretim yeri ve karbon değeri henüz doğrulanmadığından mevcut kontrolleri
-geçen bir kayıt tüm ödev kurallarını geçmiş sayılmaz.
+sıfırlar korunur. Alan doğrulamasını geçen kayıtlar henüz veritabanına kaydedilmez.
 
 ### GTIN doğrulaması
 
@@ -151,3 +149,29 @@ sayısal olmasını, her birinin 0–100 aralığında kalmasını ve toplamlar�
 100 olmasını kontrol eder. Sayı dönüşümlerinde `decimal.TryParse` ve
 `InvariantCulture` kullanılır; ondalık ayırıcı noktadır. Binlik ayırıcı kabul
 edilmez. Sayı veya aralık hatası varsa toplam kontrolü yapılmaz.
+
+### Zorunlu alanlar ve karbon doğrulaması
+
+`Validators/ProductCsvRowValidator.cs`, satırdaki tüm alan kontrollerini bir
+araya getirir. GTIN ve elyaf doğrulayıcılarına ek olarak model adı, batch
+numarası ve üretim yerinin boş veya yalnızca boşluklardan oluşmadığını
+kontrol eder. Karbon değeri, `InvariantCulture` ile `decimal` olarak
+okunabilmeli ve negatif olmamalıdır; sıfır kabul edilir. Geçersiz bir alan,
+aynı satırdaki diğer alanların kontrol edilmesini engellemez.
+
+Yeni kontrolleri denemek için, uygulama çalışırken aşağıdaki isteği gönderin.
+CSV, terminalden gönderilir; örnek CSV dosyası değiştirilmez:
+
+```bash
+curl -i -F "file=@-;filename=validation-test.csv" http://localhost:5228/api/products/import <<'CSV'
+gtin,model_adi,batch_no,elyaf_pamuk_yuzde,elyaf_elastan_yuzde,uretim_yeri,karbon_kg_co2e
+08690000000012,   ,   ,98,2,   ,abc
+08690000000012,Slim Denim 501,B-NEG,98,2,Denizli,-1
+08690000000012,Slim Denim 501,B-ZERO,98,2,Denizli,0
+CSV
+```
+
+Beklenen sonuç: `rowCount: 3`, `validCount: 1`, `rejectedCount: 2`.
+2. satırda üç zorunlu alan ve sayısal olmayan karbon için dört hata,
+3. satırda negatif karbon için bir hata döner. 4. satırdaki sıfır karbon
+değeri kabul edilir. Bu istek de henüz veritabanına kayıt yapmaz.

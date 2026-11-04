@@ -48,16 +48,7 @@ public class ProductsController : ControllerBase
                 row.RowNumber = csv.Parser.Row;
                 rowCount++;
 
-                var rowErrors = new List<string>();
-                var gtinError = GtinValidator.GetError(row.Gtin);
-
-                if (gtinError is not null)
-                {
-                    rowErrors.Add(gtinError);
-                }
-
-                rowErrors.AddRange(FiberCompositionValidator.GetErrors(
-                    row.CottonPercentage, row.ElastanePercentage));
+                var rowErrors = ProductCsvRowValidator.GetErrors(row);
 
                 if (rowErrors.Count > 0)
                 {
@@ -75,7 +66,7 @@ public class ProductsController : ControllerBase
 
             return Ok(new
             {
-                message = "GTIN ve elyaf doğrulaması tamamlandı. Diğer alanlar henüz doğrulanmadı; kayıt yapılmadı.",
+                message = "CSV doğrulaması tamamlandı. Kayıtlar henüz veritabanına kaydedilmedi.",
                 rowCount,
                 validCount = rows.Count,
                 rejectedCount = errors.Count,
