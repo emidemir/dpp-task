@@ -64,12 +64,12 @@ Veritabanını hazırlamak için aşağıdaki migration uygulama komutunu çalı
 satır numaralarıyla okur. GTIN, elyaf yüzdeleri, zorunlu metin alanları ve karbon
 değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 `GET /dpp/{gtin}` HTML ürün pasaportunu, `GET /dpp/{gtin}.jsonld` JSON-LD
-çıktısını sunar. Yetkili görünümü, PNG QR kod ve sürüm geçmişi henüz uygulanmadı.
+çıktısını sunar. Her iki çıktıda `?rol=yetkili` ile karbon değeri gösterilir.
+PNG QR kod ve sürüm geçmişi henüz uygulanmadı.
 
 ### Kalan kapsam ve bonus planı
 
-- Yetkili görünümü ve PNG QR kod çıktıları tamamlanacak; ardından
-  frontend hazırlanacak.
+- PNG QR kod çıktısı tamamlanacak; ardından frontend hazırlanacak.
 - Bonus sürüm geçmişi de uygulanacak. Ürün bilgisi gerçekten değiştiğinde
   önceki durum, sürüm numarası ve güncelleme tarihiyle saklanacak. Aynı
   değerlerin tekrar yüklenmesi yeni sürüm oluşturmayacak. Bu özellik henüz
@@ -164,6 +164,33 @@ sunulur. Elyaf yüzdelerinin değerleri JSON sayısıdır ve `unitText` alanlar�
 `%` değerindedir. Her batch'in `batch_no` özelliğinin `valueReference` alanı,
 o batch'in `uretim_yeri` özelliğini içerir; böylece parti ve üretim yeri
 ilişkisi korunur. Karbon alanı bu tüketici çıktısında bulunmaz.
+
+### Demo rol görünürlüğü
+
+Varsayılan tüketici görünümünde karbon alanı hem HTML'den hem JSON-LD'den
+tamamen çıkarılır. Karbon değeri yalnızca `rol` sorgu parametresinin değeri
+tam olarak `yetkili` olduğunda gösterilir. Parametre eksikse, boşsa veya
+başka bir değerse tüketici görünümü kullanılır.
+
+Örnek URL'ler:
+
+```text
+http://localhost:5228/dpp/08690000000012
+http://localhost:5228/dpp/08690000000012?rol=yetkili
+http://localhost:5228/dpp/08690000000012.jsonld
+http://localhost:5228/dpp/08690000000012.jsonld?rol=yetkili
+```
+
+`DppController.ShouldShowCarbon`, her iki çıktının kullandığı ortak karardır.
+HTML şablonuna `ViewData["ShowCarbon"]` ile aktarılır. Yetkili HTML sayfasında
+her batch için karbon sütunu eklenir. JSON-LD'de ilgili batch'in
+`valueReference` listesine `karbon_kg_co2e` adlı `PropertyValue` eklenir;
+değeri JSON sayısı, birimi `kg CO2e` olur. Sıfır karbon da gösterilir.
+HTML sayfasındaki JSON-LD bağlantısı seçili görünümü korur.
+
+Örnek CSV'deki `B2027-01` batch'i için yetkili çıktılarında 12.4 değeri,
+tüketici çıktılarında ise karbon alanının hiç bulunmaması beklenir. Bu ayrım
+ödevin istediği demo davranışıdır; kullanıcı hesabı veya JWT doğrulaması değildir.
 
 ### CSV dosyası yükleme
 

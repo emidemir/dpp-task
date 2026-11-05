@@ -1,6 +1,10 @@
 @using System.Linq
 @model Dpp.Api.Models.ProductModel
 
+@{
+    var showCarbon = ViewData["ShowCarbon"] is true;
+}
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
@@ -22,7 +26,7 @@
         <h1>@Model.Name</h1>
 
         <p>
-            <a href="@Url.Action("JsonLd", "Dpp", new { gtin = Model.Gtin })">JSON-LD çıktısını görüntüle</a>
+            <a href="@Url.Action("JsonLd", "Dpp", new { gtin = Model.Gtin, rol = showCarbon ? "yetkili" : null })">JSON-LD çıktısını görüntüle</a>
         </p>
 
         <dl>
@@ -43,6 +47,10 @@
                 <tr>
                     <th scope="col">Batch numarası</th>
                     <th scope="col">Üretim yeri</th>
+                    @if (showCarbon)
+                    {
+                        <th scope="col">Karbon (kg CO₂e)</th>
+                    }
                 </tr>
             </thead>
             <tbody>
@@ -51,6 +59,10 @@
                     <tr>
                         <td>@batch.BatchNumber</td>
                         <td>@batch.ProductionPlace</td>
+                        @if (showCarbon)
+                        {
+                            <td>@batch.CarbonKgCo2e</td>
+                        }
                     </tr>
                 }
             </tbody>

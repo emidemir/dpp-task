@@ -16,7 +16,7 @@ public class DppController : Controller
     }
 
     [HttpGet("{gtin}")]
-    public async Task<IActionResult> Details(string gtin)
+    public async Task<IActionResult> Details(string gtin, [FromQuery] string? rol)
     {
         var model = await FindProductAsync(gtin);
 
@@ -25,11 +25,12 @@ public class DppController : Controller
             return NotFound("Ürün bulunamadı.");
         }
 
+        ViewData["ShowCarbon"] = ShouldShowCarbon(rol);
         return View(model);
     }
 
     [HttpGet("{gtin}.jsonld")]
-    public async Task<IActionResult> JsonLd(string gtin)
+    public async Task<IActionResult> JsonLd(string gtin, [FromQuery] string? rol)
     {
         var model = await FindProductAsync(gtin);
 
@@ -37,6 +38,8 @@ public class DppController : Controller
         {
             return NotFound("Ürün bulunamadı.");
         }
+
+        var showCarbon = ShouldShowCarbon(rol);
 
         var properties = new List<Dictionary<string, object>>
         {
@@ -50,6 +53,12 @@ public class DppController : Controller
             {
                 CreatePropertyValue("uretim_yeri", batch.ProductionPlace)
             };
+
+            if (showCarbon)
+            {
+                batchProperties.Add(CreatePropertyValue(
+                    "karbon_kg_co2e", batch.CarbonKgCo2e, "kg CO2e"));
+            }
 
             var batchProperty = CreatePropertyValue("batch_no", batch.BatchNumber);
             batchProperty["valueReference"] = batchProperties;
@@ -69,6 +78,11 @@ public class DppController : Controller
         {
             ContentType = "application/ld+json"
         };
+    }
+
+    private static bool ShouldShowCarbon(string? role)
+    {
+        return role == "yetkili";
     }
 
     private Task<ProductModel?> FindProductAsync(string gtin)
