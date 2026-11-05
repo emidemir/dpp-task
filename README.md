@@ -23,6 +23,9 @@ dotnet tool restore
 
 - `ProductModel`: GTIN, model adı ve elyaf yüzdeleri.
 - `Batch`: batch numarası, üretim yeri ve karbon değeri.
+- `ProductVersion`: önceki ürün durumu için sürüm numarası, değişiklik
+  zamanı ve JSON kopyası. Veri modeli eklendi; geçmiş kaydı oluşturma mantığı
+  henüz uygulanmadı.
 - Bir ürün modeline birden fazla batch bağlanabilir. Her batch,
   `ProductModelId` alanıyla bir modele bağlanır.
 - GTIN, baştaki sıfırların korunması için metin olarak tutulur.
@@ -43,7 +46,8 @@ dotnet tool restore
   Aynı dosyanın sıralı tekrar yüklemeleri yeni model veya batch satırları üretmez.
 - Aynı GTIN için son geçerli CSV satırı model adını ve elyaf yüzdelerini
   belirler. Bu alanlar modelin bütün batch'leri için ortaktır. Mevcut batch'in
-  üretim yeri ve karbon değeri güncellenir. Önceki sürümler saklanmaz.
+  üretim yeri ve karbon değeri güncellenir. Mevcut kayıt mantığı henüz önceki
+  sürümleri saklamaz; bonus özelliğinin veri modeli hazırlanmıştır.
 
 ### Derleme
 
@@ -67,7 +71,8 @@ değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 `GET /dpp/{gtin}` HTML ürün pasaportunu, `GET /dpp/{gtin}.jsonld` JSON-LD
 çıktısını sunar. Her iki çıktıda `?rol=yetkili` ile karbon değeri gösterilir.
 `GET /dpp/{gtin}/qr.png`, tüketici HTML pasaportuna yönlendiren PNG QR kodu
-üretir. Bonus sürüm geçmişi ve frontend henüz uygulanmadı.
+üretir. Bonus sürüm geçmişinin veri modeli eklendi; geçmiş kaydı oluşturma
+mantığı ve frontend henüz uygulanmadı.
 
 ### Kalan kapsam ve bonus planı
 
@@ -75,7 +80,7 @@ değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 - Bonus sürüm geçmişi de uygulanacak. Ürün bilgisi gerçekten değiştiğinde
   önceki durum, sürüm numarası ve güncelleme tarihiyle saklanacak. Aynı
   değerlerin tekrar yüklenmesi yeni sürüm oluşturmayacak. Bu özellik henüz
-  uygulanmadı; mevcut içe aktarma kayıtları doğrudan günceller.
+  tamamlanmadı; veri modeli hazır, mevcut içe aktarma kayıtları doğrudan günceller.
 - Kullanıcı hesabı ve JWT entegrasyonu ödev kapsamında beklenmiyor.
   `?rol=yetkili`, demo amaçlı görünürlük parametresidir.
 
@@ -117,6 +122,23 @@ dotnet run --launch-profile http
 ```
 
 HTTP profili varsayılan olarak `http://localhost:5228` adresini kullanır.
+
+### Bonus sürüm geçmişi: veri modeli
+
+`Models/ProductVersion.cs`, bir ürünün güncellenmeden önceki durumunu saklamak
+için eklendi. Her geçmiş kaydı bir `ProductModel` kaydına bağlıdır.
+
+- `VersionNumber`: Saklanan önceki durumun sürüm numarası.
+- `ChangedAtUtc`: Bu durumu değiştiren güncellemenin UTC zamanı. Eski durumun
+  ilk oluşturulma tarihi değildir.
+- `SnapshotJson`: Model bilgileri ve bütün batch'lerinin değişiklik öncesi
+  değerlerini içerecek JSON metni. Güncel batch kayıtları değiştiğinde geçmiş
+  kopyası değişmeyecek.
+
+Ürün kimliği ve sürüm numarası birlikte benzersiz olacak şekilde
+yapılandırılmıştır. Farklı ürünler aynı sürüm numarasına sahip olabilir.
+Mevcut tabloların alanları değiştirilmez; migration yeni `ProductVersions`
+tablosunu ve ilişkisini oluşturacak. Bu aşamada geçmiş kayıtları henüz yazılmaz.
 
 ### HTML ürün pasaportu
 

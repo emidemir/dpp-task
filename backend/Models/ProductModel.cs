@@ -13,4 +13,6 @@ public class ProductModel
     public decimal ElastanePercentage { get; set; }
 
     public ICollection<Batch> Batches { get; set; } = [];
+
+    public ICollection<ProductVersion> Versions { get; set; } = [];
 }

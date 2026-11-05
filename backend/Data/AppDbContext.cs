@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
 
     public DbSet<Batch> Batches => Set<Batch>(); // DbSet is similar to django objects manager
 
+    public DbSet<ProductVersion> ProductVersions => Set<ProductVersion>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) // OnModelCreating is similar to Django model class's class Meta.
     {
         base.OnModelCreating(modelBuilder);
@@ -27,5 +29,14 @@ public class AppDbContext : DbContext
             .HasOne(batch => batch.ProductModel)
             .WithMany(model => model.Batches)
             .HasForeignKey(batch => batch.ProductModelId);
+
+        modelBuilder.Entity<ProductVersion>()
+            .HasOne(version => version.ProductModel)
+            .WithMany(model => model.Versions)
+            .HasForeignKey(version => version.ProductModelId);
+
+        modelBuilder.Entity<ProductVersion>()
+            .HasIndex(version => new { version.ProductModelId, version.VersionNumber })
+            .IsUnique();
     }
 }
