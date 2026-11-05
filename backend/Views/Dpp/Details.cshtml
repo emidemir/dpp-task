@@ -1,0 +1,60 @@
+@using System.Linq
+@model Dpp.Api.Models.ProductModel
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@Model.Name — Dijital Ürün Pasaportu</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.6; }
+        dt { font-weight: bold; }
+        dd { margin: 0 0 12px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        caption { text-align: left; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <main>
+        <p>Dijital Ürün Pasaportu</p>
+        <h1>@Model.Name</h1>
+
+        <p>
+            <a href="@Url.Action("JsonLd", "Dpp", new { gtin = Model.Gtin })">JSON-LD çıktısını görüntüle</a>
+        </p>
+
+        <dl>
+            <dt>GTIN</dt>
+            <dd>@Model.Gtin</dd>
+
+            <dt>Pamuk oranı</dt>
+            <dd>@Model.CottonPercentage %</dd>
+
+            <dt>Elastan oranı</dt>
+            <dd>@Model.ElastanePercentage %</dd>
+        </dl>
+
+        <h2>Üretim partileri</h2>
+        <table>
+            <caption>Ürüne bağlı batch/lot bilgileri</caption>
+            <thead>
+                <tr>
+                    <th scope="col">Batch numarası</th>
+                    <th scope="col">Üretim yeri</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var batch in Model.Batches.OrderBy(batch => batch.BatchNumber))
+                {
+                    <tr>
+                        <td>@batch.BatchNumber</td>
+                        <td>@batch.ProductionPlace</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </main>
+</body>
+</html>

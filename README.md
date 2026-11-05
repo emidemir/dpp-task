@@ -62,8 +62,20 @@ Entity sınıfları ve `AppDbContext` eklendi. SQLite bağlantısı ve uygulamay
 Veritabanını hazırlamak için aşağıdaki migration uygulama komutunu çalıştırın.
 `POST /api/products/import` endpoint'i CSV başlıklarını kontrol eder ve kayıtları
 satır numaralarıyla okur. GTIN, elyaf yüzdeleri, zorunlu metin alanları ve karbon
-değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir. DPP çıktıları
-henüz uygulanmadı.
+değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
+`GET /dpp/{gtin}` HTML ürün pasaportunu, `GET /dpp/{gtin}.jsonld` JSON-LD
+çıktısını sunar. Yetkili görünümü, PNG QR kod ve sürüm geçmişi henüz uygulanmadı.
+
+### Kalan kapsam ve bonus planı
+
+- Yetkili görünümü ve PNG QR kod çıktıları tamamlanacak; ardından
+  frontend hazırlanacak.
+- Bonus sürüm geçmişi de uygulanacak. Ürün bilgisi gerçekten değiştiğinde
+  önceki durum, sürüm numarası ve güncelleme tarihiyle saklanacak. Aynı
+  değerlerin tekrar yüklenmesi yeni sürüm oluşturmayacak. Bu özellik henüz
+  uygulanmadı; mevcut içe aktarma kayıtları doğrudan günceller.
+- Kullanıcı hesabı ve JWT entegrasyonu ödev kapsamında beklenmiyor.
+  `?rol=yetkili`, demo amaçlı görünürlük parametresidir.
 
 ### Veritabanı yapılandırması
 
@@ -103,6 +115,55 @@ dotnet run --launch-profile http
 ```
 
 HTTP profili varsayılan olarak `http://localhost:5228` adresini kullanır.
+
+### HTML ürün pasaportu
+
+Örnek CSV içe aktarıldıktan sonra tarayıcıda açın:
+
+```text
+http://localhost:5228/dpp/08690000000012
+```
+
+`Controllers/DppController.cs`, GTIN ile modeli ve bağlı bütün batch'leri
+okur. Model bulunamazsa HTTP 404 döner. `Views/Dpp/Details.cshtml`, Razor
+şablonuyla model adını, GTIN'i, elyaf yüzdelerini ve batch/üretim yeri
+bilgilerini HTML olarak sunar. Birden fazla batch varsa hepsi listelenir.
+Karbon alanı bu tüketici görünümünün HTML çıktısında bulunmaz.
+
+View desteği `Program.cs` içinde `AddControllersWithViews` ile etkinleştirilir.
+HTML için veritabanı şemasında değişiklik veya ek NuGet paketi gerekmez.
+
+### JSON-LD ürün pasaportu
+
+Örnek ürünün makine tarafından okunabilir çıktısı:
+
+```text
+http://localhost:5228/dpp/08690000000012.jsonld
+```
+
+Yanıtı HTTP başlıklarıyla kontrol etmek için:
+
+```bash
+curl -i http://localhost:5228/dpp/08690000000012.jsonld
+```
+
+Başarılı yanıtın içerik türü `application/ld+json` olur. Ürün bulunamazsa
+HTTP 404 döner. HTML ve JSON-LD aynı `FindProductAsync` sorgusunu kullanır.
+HTML pasaportunda JSON-LD çıktısına bağlantı bulunur.
+
+Çıktı, [schema.org/Product](https://schema.org/Product) yapısını temel alır:
+
+- `@context`: `https://schema.org` sözlüğünü belirtir.
+- `@type`: `Product`.
+- `gtin14`: GTIN metni; baştaki sıfırlar korunur.
+- `name`: Ürün modelinin adı.
+- `additionalProperty`: Elyaf yüzdeleri ve bütün batch'lerin bilgileri.
+
+Ek özellikler [PropertyValue](https://schema.org/PropertyValue) nesneleriyle
+sunulur. Elyaf yüzdelerinin değerleri JSON sayısıdır ve `unitText` alanları
+`%` değerindedir. Her batch'in `batch_no` özelliğinin `valueReference` alanı,
+o batch'in `uretim_yeri` özelliğini içerir; böylece parti ve üretim yeri
+ilişkisi korunur. Karbon alanı bu tüketici çıktısında bulunmaz.
 
 ### CSV dosyası yükleme
 
