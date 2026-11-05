@@ -2,6 +2,7 @@ using Dpp.Api.Data;
 using Dpp.Api.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using QRCoder;
 
 namespace Dpp.Api.Controllers;
 
@@ -78,6 +79,26 @@ public class DppController : Controller
         {
             ContentType = "application/ld+json"
         };
+    }
+
+    [HttpGet("{gtin}/qr.png")]
+    public async Task<IActionResult> QrCode(string gtin)
+    {
+        var exists = await _context.ProductModels.AnyAsync(model => model.Gtin == gtin);
+
+        if (!exists)
+        {
+            return NotFound("Ürün bulunamadı.");
+        }
+
+        var passportUrl = Url.ActionLink(nameof(Details), "Dpp", new { gtin })
+            ?? throw new InvalidOperationException("Ürün pasaportu adresi oluşturulamadı.");
+
+        using var data = QRCodeGenerator.GenerateQrCode(passportUrl, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(data);
+        var png = qrCode.GetGraphic(pixelsPerModule: 10);
+
+        return File(png, "image/png");
     }
 
     private static bool ShouldShowCarbon(string? role)

@@ -8,6 +8,7 @@ CSV dosyalarından ürün verilerini içe aktarmak ve dijital ürün pasaportlar
 - .NET 10 / ASP.NET Core Web API
 - Entity Framework Core 10.0.14 ve SQLite sağlayıcısı
 - CsvHelper 33.1.0
+- QRCoder 1.8.1
 
 ### Geliştirme araçları
 
@@ -65,11 +66,12 @@ satır numaralarıyla okur. GTIN, elyaf yüzdeleri, zorunlu metin alanları ve k
 değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 `GET /dpp/{gtin}` HTML ürün pasaportunu, `GET /dpp/{gtin}.jsonld` JSON-LD
 çıktısını sunar. Her iki çıktıda `?rol=yetkili` ile karbon değeri gösterilir.
-PNG QR kod ve sürüm geçmişi henüz uygulanmadı.
+`GET /dpp/{gtin}/qr.png`, tüketici HTML pasaportuna yönlendiren PNG QR kodu
+üretir. Bonus sürüm geçmişi ve frontend henüz uygulanmadı.
 
 ### Kalan kapsam ve bonus planı
 
-- PNG QR kod çıktısı tamamlanacak; ardından frontend hazırlanacak.
+- Bonus sürüm geçmişi ve backend kontrollerinin ardından frontend hazırlanacak.
 - Bonus sürüm geçmişi de uygulanacak. Ürün bilgisi gerçekten değiştiğinde
   önceki durum, sürüm numarası ve güncelleme tarihiyle saklanacak. Aynı
   değerlerin tekrar yüklenmesi yeni sürüm oluşturmayacak. Bu özellik henüz
@@ -191,6 +193,38 @@ HTML sayfasındaki JSON-LD bağlantısı seçili görünümü korur.
 Örnek CSV'deki `B2027-01` batch'i için yetkili çıktılarında 12.4 değeri,
 tüketici çıktılarında ise karbon alanının hiç bulunmaması beklenir. Bu ayrım
 ödevin istediği demo davranışıdır; kullanıcı hesabı veya JWT doğrulaması değildir.
+
+### PNG QR kod
+
+Örnek ürünün QR görselini tarayıcıda açın:
+
+```text
+http://localhost:5228/dpp/08690000000012/qr.png
+```
+
+Endpoint, ürünün kayıtlı olduğunu kontrol eder; bulunamazsa HTTP 404 döner.
+Kayıtlı ürün için `image/png` içerik türüyle PNG baytlarını döndürür. Görsel
+QRCoder'ın `PngByteQRCode` renderer'ı ile istek sırasında bellekte üretilir;
+veritabanı şeması değiştirilmez ve PNG dosyası sunucuda kalıcı olarak saklanmaz.
+HTML ürün pasaportunda QR görseli ve PNG indirme bağlantısı bulunur.
+
+QR, `Url.ActionLink` ile oluşturulan mutlak HTML pasaport adresini içerir.
+HTTP/HTTPS, sunucu ve port bilgileri QR isteğinden alınır. `rol=yetkili`
+parametresi QR hedefine eklenmez; QR varsayılan tüketici görünümüne yönlendirir.
+
+Yanıt başlıklarını görseli terminale yazdırmadan kontrol etmek için:
+
+```bash
+curl -sS -D - -o /dev/null http://localhost:5228/dpp/08690000000012/qr.png
+```
+
+Beklenen sonuç HTTP 200 ve `Content-Type: image/png` başlığıdır. QR çözüldüğünde
+bu örnekte `http://localhost:5228/dpp/08690000000012` adresi görülmelidir.
+
+Telefonda `localhost`, bilgisayarı değil telefonun kendisini ifade eder.
+Telefondan açılışı denemek için sunucu ağdan erişilebilir şekilde çalışmalı ve
+QR görseli bilgisayarın yerel ağ IP adresi üzerinden alınmalıdır; böylece QR
+hedefine de bu adres yazılır.
 
 ### CSV dosyası yükleme
 

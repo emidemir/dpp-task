@@ -67,6 +67,19 @@
                 }
             </tbody>
         </table>
+
+        <section>
+            <h2>Ürün pasaportu QR kodu</h2>
+            <p>
+                <img src="@Url.Action("QrCode", "Dpp", new { gtin = Model.Gtin })"
+                     alt="Ürün pasaportuna yönlendiren QR kod"
+                     width="256" height="256" />
+            </p>
+            <p>
+                <a href="@Url.Action("QrCode", "Dpp", new { gtin = Model.Gtin })"
+                   download="@(Model.Gtin).png">QR kodunu PNG olarak indir</a>
+            </p>
+        </section>
     </main>
 </body>
 </html>
