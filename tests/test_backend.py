@@ -268,6 +268,63 @@ class BackendTests(unittest.TestCase):
         self.assertTrue(result["message"])
         self.assertEqual(self.sql("SELECT COUNT(*) FROM ProductModels"), [(0,)])
 
+    def test_multiline_records_report_physical_start_rows(self):
+        for ending in ("\n", "\r\n", "\r"):
+            for final_newline in (True, False):
+                with self.subTest(ending=repr(ending), final_newline=final_newline):
+                    valid = PRODUCT.copy()
+                    valid[1] = f"Denim{ending}Model"
+                    invalid = PRODUCT.copy()
+                    invalid[0], invalid[1] = "", f"Hatalı{ending}Model"
+                    other = PRODUCT.copy()
+                    other[0] = "08690000000029"
+                    stream = io.StringIO(newline="")
+                    writer = csv.writer(stream, lineterminator=ending)
+                    writer.writerows([HEADERS, [], valid, [], [], invalid, other])
+                    content = stream.getvalue()
+                    if not final_newline:
+                        content = content.removesuffix(ending)
+                    result = self.upload(content.encode("utf-8"))
+                    # Başlık 1; boş 2; geçerli 3–4; boş 5–6; hatalı 7–8; geçerli 9.
+                    self.assertEqual(result["rowCount"], 3)
+                    self.assertEqual(result["savedCount"], 2)
+                    self.assertEqual(result["rejectedCount"], 1)
+                    self.assertEqual(result["errors"][0]["rowNumber"], 7)
+                    self.assertEqual([row["rowNumber"] for row in result["rows"]], [3, 9])
+                    self.assertEqual(self.sql("SELECT COUNT(*) FROM ProductModels"), [(2,)])
+
+    def test_multiline_column_count_error_reports_start_row(self):
+        for ending in ("\n", "\r\n", "\r"):
+            with self.subTest(ending=repr(ending)):
+                valid = PRODUCT.copy()
+                valid[1] = f"Denim{ending}Model"
+                incomplete = PRODUCT[:-1]
+                incomplete[1] = f"Eksik{ending}Satır"
+                other = PRODUCT.copy()
+                other[0] = "08690000000029"
+                stream = io.StringIO(newline="")
+                csv.writer(stream, lineterminator=ending).writerows([HEADERS, valid, incomplete, other])
+                result = self.upload(stream.getvalue().removesuffix(ending).encode("utf-8"))
+                self.assertEqual(result["savedCount"], 2)
+                self.assertEqual(result["rejectedCount"], 1)
+                self.assertEqual(result["errors"][0]["rowNumber"], 4)
+                self.assertIn("6 sütun bulundu", result["errors"][0]["messages"][0])
+                self.assertEqual([row["rowNumber"] for row in result["rows"]], [2, 6])
+                self.assertEqual(self.sql("SELECT COUNT(*) FROM Batches"), [(2,)])
+
+    def test_unreadable_multiline_csv_reports_start_row(self):
+        for ending in ("\n", "\r\n", "\r"):
+            with self.subTest(ending=repr(ending)):
+                valid = PRODUCT.copy()
+                valid[1] = f"Denim{ending}Model"
+                stream = io.StringIO(newline="")
+                csv.writer(stream, lineterminator=ending).writerows([HEADERS, valid, []])
+                # Bozuk kayıt 5'te başlar; kapanmayan tırnakla sonraki satıra yayılır.
+                content = stream.getvalue() + f'08690000000029,"Kapanmayan{ending}Model,B-2,98,2,Denizli,12.4{ending}'
+                result = self.upload(content.encode("utf-8"), status=400)
+                self.assertEqual(result["rowNumber"], 5)
+                self.assertEqual(self.sql("SELECT COUNT(*) FROM ProductModels"), [(0,)])
+
     def test_numeric_boundaries_and_text_normalization(self):
         row = [PRODUCT[0], "  Slim Denim 501  ", "  B2027-01  ", "100", "0", "  Denizli  ", "0"]
         self.upload(csv_bytes(row))

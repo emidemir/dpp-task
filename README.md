@@ -69,7 +69,8 @@ GTIN'leri korumak için CSV'yi Excel'de yeniden kaydetmeyin.
 
 Örnek dosyanın sonucu **5 satır, 3 kabul, 2 ret**: 4. satırda GTIN boş,
 5. satırda elyaf toplamı 98'dir. Okunabilir dosyalarda geçerli satırlar kaydedilir;
-hatalar `errors` içinde satır numarası ve nedenleriyle döner. Başlık 1. satırdır.
+hatalar `errors` içinde nedenleri ve kaydın başladığı fiziksel satır numarasıyla
+döner. Başlık 1. satırdır; tırnaklı alanlar birden fazla satıra yayılabilir.
 `savedCount`, değişmeyenler dahil geçerli satır sayısıdır. Dosya/başlık veya
 okunamayan CSV yapısı hatalarında HTTP 400 döner.
 
@@ -116,6 +117,6 @@ npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-Backend'de 14 entegrasyon testi, frontend'de alt senaryolar dahil 18 istemci testi
+Backend'de 17 entegrasyon testi, frontend'de alt senaryolar dahil 18 istemci testi
 bulunur. Bonus için [01–06 CSV senaryoları ve beklenen sonuçlar](examples/bonus/README.md),
 arayüz ayrıntıları için [frontend rehberi](frontend/README.md) kullanılabilir.

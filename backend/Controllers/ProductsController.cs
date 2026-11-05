@@ -35,6 +35,8 @@ public class ProductsController : ControllerBase
 
         using var reader = new StreamReader(file.OpenReadStream());
         using var csv = new CsvReader(reader, CultureInfo.InvariantCulture);
+        var previousRecordRow = 0;
+        var previousRecordRawRow = 0;
 
         try
         {
@@ -54,8 +56,19 @@ public class ProductsController : ControllerBase
             var errors = new List<CsvRowError>();
             var rowCount = 0;
 
-            while (await csv.ReadAsync())
+            while (true)
             {
+                previousRecordRow = csv.Parser.Row;
+                previousRecordRawRow = csv.Parser.RawRow;
+
+                if (!await csv.ReadAsync())
+                {
+                    break;
+                }
+
+                // Boş satırlar iki sayacı da artırır; alan içi satır sonları yalnızca RawRow'u artırır.
+                // Önceki konumdan ilerleyerek bu kaydın başladığı fiziksel satırı bul.
+                var rowNumber = previousRecordRawRow + (csv.Parser.Row - previousRecordRow);
                 rowCount++;
                 var columnCount = csv.Parser.Record!.Length;
 
@@ -63,7 +76,7 @@ public class ProductsController : ControllerBase
                 {
                     errors.Add(new CsvRowError
                     {
-                        RowNumber = csv.Parser.Row,
+                        RowNumber = rowNumber,
                         Messages =
                         [
                             $"Satır {expectedColumnCount} sütun içermelidir; {columnCount} sütun bulundu."
@@ -74,7 +87,7 @@ public class ProductsController : ControllerBase
                 }
 
                 var row = csv.GetRecord<ProductCsvRow>();
-                row.RowNumber = csv.Parser.Row;
+                row.RowNumber = rowNumber;
                 var rowErrors = ProductCsvRowValidator.GetErrors(row);
 
                 if (rowErrors.Count > 0)
@@ -118,7 +131,7 @@ public class ProductsController : ControllerBase
         {
             return BadRequest(new
             {
-                rowNumber = csv.Parser.Row,
+                rowNumber = previousRecordRawRow + (csv.Parser.Row - previousRecordRow),
                 message = "CSV satırı okunamadı. Alan sayısını ve tırnak kullanımını kontrol edin."
             });
         }
