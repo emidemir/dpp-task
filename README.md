@@ -3,6 +3,10 @@
 CSV dosyalarından ürün verilerini içe aktarmak ve dijital ürün pasaportları
 üretmek için geliştirilmekte olan uygulama.
 
+Bonus sürüm geçmişini denemek için [örnek CSV senaryolarını](examples/bonus/README.md)
+01–06 sırasıyla yükleyebilirsiniz. Her adımın beklenen API ve geçmiş sonuçları
+aynı rehberde açıklanmıştır.
+
 ## Docker ile çalıştırma
 
 Docker Desktop ve Docker Compose hazırken depo kökünde çalıştırın:
