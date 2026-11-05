@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using CsvHelper;
 using Dpp.Api.Data;
 using Dpp.Api.Dtos;
@@ -109,46 +110,100 @@ public class ProductsController : ControllerBase
 
     private async Task SaveRowAsync(ProductCsvRow row)
     {
+        var name = row.ModelName.Trim();
+        var batchNumber = row.BatchNumber.Trim();
+        var productionPlace = row.ProductionPlace.Trim();
+        var cotton = decimal.Parse(
+            row.CottonPercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var elastane = decimal.Parse(
+            row.ElastanePercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
+        var carbon = decimal.Parse(
+            row.CarbonKgCo2e, NumberStyles.Float, CultureInfo.InvariantCulture);
+
         var model = await _context.ProductModels
-            .Include(model => model.Batches)
-            .SingleOrDefaultAsync(model => model.Gtin == row.Gtin);
+            .Include(product => product.Batches)
+            .SingleOrDefaultAsync(product => product.Gtin == row.Gtin);
+
+        var batch = model?.Batches.SingleOrDefault(candidate => candidate.BatchNumber == batchNumber);
 
         if (model is null)
         {
             model = new ProductModel
             {
                 Gtin = row.Gtin,
-                Name = row.ModelName.Trim()
+                Name = name
             };
 
             _context.ProductModels.Add(model);
         }
+        else
+        {
+            var modelChanged = model.Name != name
+                || model.CottonPercentage != cotton
+                || model.ElastanePercentage != elastane;
 
-        model.Name = row.ModelName.Trim();
-        model.CottonPercentage = decimal.Parse(
-            row.CottonPercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
-        model.ElastanePercentage = decimal.Parse(
-            row.ElastanePercentage, NumberStyles.Float, CultureInfo.InvariantCulture);
+            var batchChanged = batch is null
+                || batch.ProductionPlace != productionPlace
+                || batch.CarbonKgCo2e != carbon;
 
-        var batchNumber = row.BatchNumber.Trim();
-        var batch = model.Batches.SingleOrDefault(batch => batch.BatchNumber == batchNumber);
+            if (!modelChanged && !batchChanged)
+            {
+                return;
+            }
+
+            await AddPreviousVersionAsync(model);
+        }
+
+        model.Name = name;
+        model.CottonPercentage = cotton;
+        model.ElastanePercentage = elastane;
 
         if (batch is null)
         {
             batch = new Batch
             {
                 BatchNumber = batchNumber,
-                ProductionPlace = row.ProductionPlace.Trim(),
+                ProductionPlace = productionPlace,
                 ProductModel = model
             };
 
             model.Batches.Add(batch);
         }
 
-        batch.ProductionPlace = row.ProductionPlace.Trim();
-        batch.CarbonKgCo2e = decimal.Parse(
-            row.CarbonKgCo2e, NumberStyles.Float, CultureInfo.InvariantCulture);
+        batch.ProductionPlace = productionPlace;
+        batch.CarbonKgCo2e = carbon;
 
         await _context.SaveChangesAsync();
+    }
+
+    private async Task AddPreviousVersionAsync(ProductModel model)
+    {
+        var previousVersionNumber = await _context.ProductVersions
+            .Where(version => version.ProductModelId == model.Id)
+            .MaxAsync(version => (int?)version.VersionNumber) ?? 0;
+
+        var snapshot = new
+        {
+            model.Gtin,
+            model.Name,
+            model.CottonPercentage,
+            model.ElastanePercentage,
+            Batches = model.Batches
+                .OrderBy(batch => batch.BatchNumber)
+                .Select(batch => new
+                {
+                    batch.BatchNumber,
+                    batch.ProductionPlace,
+                    batch.CarbonKgCo2e
+                })
+                .ToArray()
+        };
+
+        _context.ProductVersions.Add(new ProductVersion
+        {
+            ProductModel = model,
+            VersionNumber = previousVersionNumber + 1,
+            SnapshotJson = JsonSerializer.Serialize(snapshot)
+        });
     }
 }

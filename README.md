@@ -24,8 +24,7 @@ dotnet tool restore
 - `ProductModel`: GTIN, model adı ve elyaf yüzdeleri.
 - `Batch`: batch numarası, üretim yeri ve karbon değeri.
 - `ProductVersion`: önceki ürün durumu için sürüm numarası, değişiklik
-  zamanı ve JSON kopyası. Veri modeli eklendi; geçmiş kaydı oluşturma mantığı
-  henüz uygulanmadı.
+  zamanı ve JSON kopyası. Mevcut ürünün bilgileri değişmeden önce oluşturulur.
 - Bir ürün modeline birden fazla batch bağlanabilir. Her batch,
   `ProductModelId` alanıyla bir modele bağlanır.
 - GTIN, baştaki sıfırların korunması için metin olarak tutulur.
@@ -46,8 +45,8 @@ dotnet tool restore
   Aynı dosyanın sıralı tekrar yüklemeleri yeni model veya batch satırları üretmez.
 - Aynı GTIN için son geçerli CSV satırı model adını ve elyaf yüzdelerini
   belirler. Bu alanlar modelin bütün batch'leri için ortaktır. Mevcut batch'in
-  üretim yeri ve karbon değeri güncellenir. Mevcut kayıt mantığı henüz önceki
-  sürümleri saklamaz; bonus özelliğinin veri modeli hazırlanmıştır.
+  üretim yeri ve karbon değeri güncellenir. Mevcut ürünün durumu değişiyorsa
+  önceki model ve bütün batch bilgileri sürüm geçmişine kaydedilir.
 
 ### Derleme
 
@@ -71,16 +70,12 @@ değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 `GET /dpp/{gtin}` HTML ürün pasaportunu, `GET /dpp/{gtin}.jsonld` JSON-LD
 çıktısını sunar. Her iki çıktıda `?rol=yetkili` ile karbon değeri gösterilir.
 `GET /dpp/{gtin}/qr.png`, tüketici HTML pasaportuna yönlendiren PNG QR kodu
-üretir. Bonus sürüm geçmişinin veri modeli eklendi; geçmiş kaydı oluşturma
-mantığı ve frontend henüz uygulanmadı.
+üretir. Bonus sürüm geçmişi, içe aktarmadaki gerçek değişiklikleri kaydeder;
+aynı değerlerin tekrar yüklenmesi yeni sürüm oluşturmaz. Frontend henüz uygulanmadı.
 
-### Kalan kapsam ve bonus planı
+### Kalan kapsam
 
-- Bonus sürüm geçmişi ve backend kontrollerinin ardından frontend hazırlanacak.
-- Bonus sürüm geçmişi de uygulanacak. Ürün bilgisi gerçekten değiştiğinde
-  önceki durum, sürüm numarası ve güncelleme tarihiyle saklanacak. Aynı
-  değerlerin tekrar yüklenmesi yeni sürüm oluşturmayacak. Bu özellik henüz
-  tamamlanmadı; veri modeli hazır, mevcut içe aktarma kayıtları doğrudan günceller.
+- Backend kontrollerinin ardından frontend hazırlanacak.
 - Kullanıcı hesabı ve JWT entegrasyonu ödev kapsamında beklenmiyor.
   `?rol=yetkili`, demo amaçlı görünürlük parametresidir.
 
@@ -109,6 +104,11 @@ Bu komut, yoksa `dpp.db` dosyasını oluşturur ve uygulanmamış migration'lar�
 ve GTIN için benzersiz indeksi oluşturur. EF Core, uygulanan migration'ları
 `__EFMigrationsHistory` tablosunda takip eder.
 
+`AddProductVersionHistory` migration'ı ise `ProductVersions` tablosunu,
+ürün ilişkisini ve `(ProductModelId, VersionNumber)` benzersiz indeksini
+ekler. Aynı `dotnet ef database update` komutu, bu migration'ı da uygular;
+mevcut ürün ve batch kayıtları korunur.
+
 Migration dosyaları, model snapshot'ı ve `dotnet-tools.json` Git'e dahil edilir;
 yerel `dpp.db` dosyası dahil edilmez. Depoyu indiren biri, mevcut ilk migration'ı
 yeniden oluşturmak yerine `dotnet ef database update` komutunu çalıştırmalıdır.
@@ -123,7 +123,7 @@ dotnet run --launch-profile http
 
 HTTP profili varsayılan olarak `http://localhost:5228` adresini kullanır.
 
-### Bonus sürüm geçmişi: veri modeli
+### Bonus sürüm geçmişi
 
 `Models/ProductVersion.cs`, bir ürünün güncellenmeden önceki durumunu saklamak
 için eklendi. Her geçmiş kaydı bir `ProductModel` kaydına bağlıdır.
@@ -132,13 +132,65 @@ için eklendi. Her geçmiş kaydı bir `ProductModel` kaydına bağlıdır.
 - `ChangedAtUtc`: Bu durumu değiştiren güncellemenin UTC zamanı. Eski durumun
   ilk oluşturulma tarihi değildir.
 - `SnapshotJson`: Model bilgileri ve bütün batch'lerinin değişiklik öncesi
-  değerlerini içerecek JSON metni. Güncel batch kayıtları değiştiğinde geçmiş
-  kopyası değişmeyecek.
+  değerlerini içeren JSON metni. Güncel batch kayıtları değiştiğinde geçmiş
+  kopyası değişmez.
 
 Ürün kimliği ve sürüm numarası birlikte benzersiz olacak şekilde
 yapılandırılmıştır. Farklı ürünler aynı sürüm numarasına sahip olabilir.
-Mevcut tabloların alanları değiştirilmez; migration yeni `ProductVersions`
-tablosunu ve ilişkisini oluşturacak. Bu aşamada geçmiş kayıtları henüz yazılmaz.
+Mevcut tabloların alanları değiştirilmez; `AddProductVersionHistory` migration'ı
+yeni `ProductVersions` tablosunu ve ilişkisini oluşturur. Uygulamak için
+`backend/` dizininden `dotnet ef database update` çalıştırılır. Bu aşamada
+tablo hazırlandıktan sonra aşağıdaki kayıt mantığı kullanılabilir.
+
+`ProductsController.SaveRowAsync`, doğrulanmış satırdaki sayıları `decimal`
+tipine çevirir ve metinlerin başındaki/sonundaki boşlukları temizler. Mevcut
+model alanlarını ve ilgili batch'i gelen değerlerle karşılaştırır:
+
+- İlk kez oluşturulan ürünün saklanacak önceki durumu yoktur; geçmiş kaydı yazılmaz.
+- Mevcut üründe model adı, elyaf yüzdeleri, üretim yeri veya karbon değişiyorsa
+  değişiklik öncesi durum saklanır. Mevcut ürüne yeni batch eklenmesi de değişikliktir.
+- Aynı değerler tekrar gelirse `SaveChangesAsync` çağrısı ve geçmiş kaydı atlanır.
+  `12.4` ve `12.40` gibi aynı sayıyı ifade eden metinler değişiklik sayılmaz.
+- İlk değişiklikte önceki durum `VersionNumber: 1` ile, sonraki değişikliklerde
+  2, 3, ... numaralarıyla saklanır. Güncel durumun sürümü, geçmişteki en büyük
+  sürüm numarasının bir fazlasıdır; geçmiş yoksa güncel sürüm 1 kabul edilir.
+- Aynı yüklemede aynı ürünü değiştiren birden fazla geçerli satır varsa her
+  satır ayrı bir değişiklik olarak işlenir.
+
+`AddPreviousVersionAsync`, yalnızca gereken değerleri seçerek JSON üretir;
+entity ilişkileri ve önceki sürümler JSON'a eklenmez. Eski durum kopyası ve
+güncel model/batch değişiklikleri aynı `SaveChangesAsync` çağrısıyla, EF Core'un
+transaction'ı içinde birlikte kaydedilir.
+
+#### Sürüm geçmişini kontrol etme
+
+Uygulamayı yeniden başlattıktan sonra aynı örnek CSV'yi tekrar yüklemek,
+veritabanındaki değerler zaten aynıysa geçmiş sayısını artırmamalıdır.
+`backend/` dizininden mevcut sayıyı kontrol edebilirsiniz:
+
+```bash
+sqlite3 dpp.db "SELECT COUNT(*) FROM ProductVersions;"
+```
+
+Örnek CSV yüklenmişken aşağıdaki istek `B2027-01` karbon değerini 12.4'ten
+13.4'e değiştirir. Önceki durumun JSON kopyasında 12.4 korunmalıdır:
+
+```bash
+curl -i -F "file=@-;filename=version-test.csv" http://localhost:5228/api/products/import <<'CSV'
+gtin,model_adi,batch_no,elyaf_pamuk_yuzde,elyaf_elastan_yuzde,uretim_yeri,karbon_kg_co2e
+08690000000012,Slim Denim 501,B2027-01,98,2,Denizli,13.4
+CSV
+```
+
+Bu isteği aynı içerikle tekrar göndermek ek geçmiş kaydı oluşturmamalıdır.
+Saklanan eski durumları görmek için:
+
+```bash
+sqlite3 -header -column dpp.db "SELECT VersionNumber, ChangedAtUtc, SnapshotJson FROM ProductVersions WHERE ProductModelId = (SELECT Id FROM ProductModels WHERE Gtin = '08690000000012') ORDER BY VersionNumber;"
+```
+
+Bu test güncel karbon değerini 13.4 yapar. Örnek CSV'yi yeniden yükleyerek
+12.4'e dönmek de gerçek bir değişikliktir ve bir geçmiş kaydı daha oluşturur.
 
 ### HTML ürün pasaportu
 
@@ -269,7 +321,8 @@ okunamıyorsa HTTP 400 döner. CSV okunabildiğinde HTTP 200 döner. Yanıtta:
 - `rowCount`: Okunan toplam veri kaydı sayısı.
 - `validCount`: Alan doğrulamalarını geçen kayıt sayısı.
 - `savedCount`: Model ve batch bilgileri kaydedilen geçerli satır sayısı;
-  yeni eklenen kayıt sayısı değildir, mevcut kayıtlar da bu sayıya dahildir.
+  yeni eklenen kayıt sayısı değildir. Mevcut değerleriyle aynı olduğundan
+  yeniden yazılmayan geçerli satırlar da bu sayıya dahildir.
 - `rejectedCount`: Bu kontroller nedeniyle reddedilen kayıt sayısı.
 - `rows`: Mevcut kontrolleri geçen kayıtlar.
 - `errors`: Hatalı kayıtların `rowNumber` ve `messages` alanları.
