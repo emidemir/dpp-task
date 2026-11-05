@@ -48,6 +48,7 @@ public class ProductsController : ControllerBase
 
             csv.ReadHeader();
             csv.ValidateHeader<ProductCsvRow>();
+            var expectedColumnCount = csv.HeaderRecord!.Length;
 
             var rows = new List<ProductCsvRow>();
             var errors = new List<CsvRowError>();
@@ -55,10 +56,25 @@ public class ProductsController : ControllerBase
 
             while (await csv.ReadAsync())
             {
+                rowCount++;
+                var columnCount = csv.Parser.Record!.Length;
+
+                if (columnCount != expectedColumnCount)
+                {
+                    errors.Add(new CsvRowError
+                    {
+                        RowNumber = csv.Parser.Row,
+                        Messages =
+                        [
+                            $"Satır {expectedColumnCount} sütun içermelidir; {columnCount} sütun bulundu."
+                        ]
+                    });
+
+                    continue;
+                }
+
                 var row = csv.GetRecord<ProductCsvRow>();
                 row.RowNumber = csv.Parser.Row;
-                rowCount++;
-
                 var rowErrors = ProductCsvRowValidator.GetErrors(row);
 
                 if (rowErrors.Count > 0)

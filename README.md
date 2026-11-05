@@ -123,6 +123,43 @@ dotnet run --launch-profile http
 
 HTTP profili varsayılan olarak `http://localhost:5228` adresini kullanır.
 
+### Otomatik backend testleri
+
+Depo kökünde çalıştırın:
+
+```bash
+python3 tests/test_backend.py
+```
+
+Test dosyası Python 3'ün standart `unittest` kütüphanesini kullanır; ek Python
+paketi gerektirmez. .NET 10 SDK ve yukarıda açıklanan yerel `dotnet-ef` aracı
+hazır olmalıdır. Test çalıştırıcısı macOS/Linux içindir.
+
+Testler backend kaynaklarını geçici bir dizine kopyalar, derler ve gerçek EF
+migration'larını ayrı bir SQLite veritabanına uygular. Geçici sunucu boş bir
+yerel portta başlatılır; gerçek HTTP istekleri ve veritabanı sorgularıyla kontrol
+edilir. Her test boş veriyle başlar. Mevcut `backend/dpp.db` kullanılmaz; test
+sunucusu ve geçici dosyalar çalışma sonunda temizlenir. Backend'i ayrıca
+başlatmanız gerekmez.
+
+14 test yöntemi, alt senaryolarıyla birlikte şunları kapsar:
+
+- Örnek CSV: 5 satırdan 3 kabul, 2 ret; hata satırları 4 ve 5.
+- GTIN, elyaf, zorunlu alan ve karbon kuralları; aynı satırdaki bütün hatalar.
+- Eksik/boş dosya, yanlış başlık, yalnızca başlık içeren dosya ve bozuk CSV.
+- Eksik/fazla sütunlu satırların reddedilip diğer geçerli satırların kaydedilmesi.
+- Tekrar yüklemede kayıtların çoğalmaması; sıfır ve sınır değerlerinin kabulü.
+- HTML ve JSON-LD içerikleri, baştaki sıfırlar, rol ayrımı ve HTTP 404 yanıtları.
+- QR yanıtının PNG imzası, boyutları, CRC kontrolleri, sıkıştırılmış görüntü verisi
+  ve HTML indirme bağlantısı. QR içindeki adresin kamerayla/decoder ile okunması
+  bu otomatik testin kapsamına dahil değildir.
+- Güncellemede eski durumun, artan sürüm numarasının ve UTC zamanının saklanması;
+  aynı değerlerin tekrar yüklenmesinde yeni sürüm oluşturulmaması.
+- Çoklu batch, Türkçe karakterler, tırnaklı CSV alanları ve HTML escaping.
+
+Başarılı çalışmanın sonunda `Ran 14 tests` ve `OK` görülür. Bir kontrol
+başarısızsa komut sıfırdan farklı çıkış koduyla tamamlanır.
+
 ### Bonus sürüm geçmişi
 
 `Models/ProductVersion.cs`, bir ürünün güncellenmeden önceki durumunu saklamak
@@ -331,6 +368,8 @@ Başlık satırı 1. satırdır. Örnek dosyada 5 kayıt okunur; 3 kayıt kontro
 4. satırdaki boş GTIN ve 5. satırdaki yüzde toplamının 98 olması nedeniyle
 2 kayıt reddedilir. Bir satırdaki bütün alan hataları aynı `messages`
 listesinde toplanır. Hatalı satırlar diğer kayıtların işlenmesini durdurmaz.
+Bir veri satırının sütun sayısı başlıkla uyuşmuyorsa beklenen ve bulunan sütun
+sayılarıyla satır hatası döner; diğer satırların işlenmesi devam eder.
 
 `Dtos/ProductCsvRow.cs`, CSV sütunlarını C# alanlarına eşler. Sayısal alanlar
 dahil bütün CSV değerleri bu aşamada metin olarak tutulur; GTIN'in başındaki
