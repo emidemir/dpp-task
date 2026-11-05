@@ -21,8 +21,7 @@ image'larını derler ve container'ları arka planda başlatır. Bilgisayarda ay
 - Frontend üzerinden API: `http://localhost:5173/api/products/import`
 - Frontend üzerinden pasaport: `http://localhost:5173/dpp/{gtin}`
 
-Frontend şu anda Vite başlangıç ekranıdır; CSV yükleme arayüzü henüz yazılmadı.
-Docker, mevcut frontend kodunu çalıştırır. Bu kurulum derlenmiş dosyaları sunar;
+Frontend, CSV yükleme ve sonuç ekranını sunar. Bu kurulum derlenmiş dosyaları sunar;
 kod değişikliklerinden sonra aynı `docker compose up --build -d` komutu gerekir.
 
 ### Container'ların görevleri
@@ -88,6 +87,37 @@ docker compose down
 
 Bu komut SQLite volume'ünü korur. `docker compose down -v` ise volume'ü ve
 içindeki ürün/sürüm verilerini siler.
+
+## Frontend
+
+React + TypeScript ekranı CSV seçme/sürükleyip bırakma, örnek dosya indirme,
+kabul/ret özeti, satır bazında hata listesi ve ürün pasaportu bağlantılarını içerir.
+Tüketici/yetkili seçimi HTML ve JSON-LD bağlantılarına uygulanır; QR bağlantısı
+tüketici görünümünde kalır. Kayıtlı bir ürün GTIN ile doğrudan açılabilir.
+
+Backend `http://localhost:5228` adresinde çalışırken, `frontend/` dizininde:
+
+```bash
+npm ci
+npm run dev
+```
+
+Node.js 24 veya daha yeni bir sürüm önerilir. Arayüz `http://localhost:5173`
+adresindedir. Vite geliştirme ve preview sunucuları `/api` ve `/dpp` isteklerini
+backend'e iletir; Docker'da bu işi Nginx yapar. Ekrandaki rapor son yüklemeye
+aittir; sayfa yenilenince rapor sıfırlanır, veritabanındaki kayıtlar korunur.
+
+Frontend kontrolleri, `frontend/` dizininden:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+Alt senaryolar dahil 18 istemci testi bulunur. Ayrıntılar ve dosya haritası
+[frontend/README.md](frontend/README.md) içindedir. Backend'i anlamak ve mülakata
+hazırlanmak için [BACKEND_REHBERI.md](BACKEND_REHBERI.md) dosyasını okuyun.
 
 ## Backend
 
@@ -157,11 +187,11 @@ değeri doğrulanır. Geçerli satırlar SQLite veritabanına kaydedilir.
 çıktısını sunar. Her iki çıktıda `?rol=yetkili` ile karbon değeri gösterilir.
 `GET /dpp/{gtin}/qr.png`, tüketici HTML pasaportuna yönlendiren PNG QR kodu
 üretir. Bonus sürüm geçmişi, içe aktarmadaki gerçek değişiklikleri kaydeder;
-aynı değerlerin tekrar yüklenmesi yeni sürüm oluşturmaz. Frontend henüz uygulanmadı.
+güncel değerlerle aynı satırların tekrar yüklenmesi yeni sürüm oluşturmaz.
+Frontend CSV yükleme, raporlama ve pasaport açma akışlarını sunar.
 
-### Kalan kapsam
+### Kapsam notu
 
-- Backend kontrollerinin ardından frontend hazırlanacak.
 - Kullanıcı hesabı ve JWT entegrasyonu ödev kapsamında beklenmiyor.
   `?rol=yetkili`, demo amaçlı görünürlük parametresidir.
 
