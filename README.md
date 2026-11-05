@@ -3,6 +3,92 @@
 CSV dosyalarından ürün verilerini içe aktarmak ve dijital ürün pasaportları
 üretmek için geliştirilmekte olan uygulama.
 
+## Docker ile çalıştırma
+
+Docker Desktop ve Docker Compose hazırken depo kökünde çalıştırın:
+
+```bash
+docker compose config --quiet
+docker compose up --build -d
+```
+
+İlk komut Compose yapılandırmasını doğrular. İkinci komut backend ve frontend
+image'larını derler ve container'ları arka planda başlatır. Bilgisayarda ayrıca
+.NET veya Node.js kurulması gerekmez; derleme Docker içinde yapılır.
+
+- Frontend: <http://localhost:5173>
+- Doğrudan backend: <http://localhost:5228>
+- Frontend üzerinden API: `http://localhost:5173/api/products/import`
+- Frontend üzerinden pasaport: `http://localhost:5173/dpp/{gtin}`
+
+Frontend şu anda Vite başlangıç ekranıdır; CSV yükleme arayüzü henüz yazılmadı.
+Docker, mevcut frontend kodunu çalıştırır. Bu kurulum derlenmiş dosyaları sunar;
+kod değişikliklerinden sonra aynı `docker compose up --build -d` komutu gerekir.
+
+### Container'ların görevleri
+
+- `backend/Dockerfile`: .NET 10 SDK ile uygulamayı derler, yalnızca yayın
+  çıktısını ASP.NET Core runtime image'ına kopyalar. Uygulama root olmayan
+  kullanıcıyla, container içinde 8080 portunda çalışır.
+- `frontend/Dockerfile`: Node.js 24 ile `npm ci` ve `npm run build` çalıştırır;
+  oluşan `dist` dosyalarını Nginx ile container içinde 80 portunda sunar.
+- `frontend/nginx.conf`: `/api/` ve `/dpp/` isteklerini Compose ağındaki
+  `backend:8080` adresine iletir. Frontend kodu `/api/products/import` gibi
+  göreli URL'ler kullanabilir. İsteklerin dışarıdan kullanılan host ve portu
+  korunduğu için QR adresine container'ın servis adı yazılmaz. Nginx üzerinden
+  istek gövdesi sınırı 10 MB'dır.
+- `.dockerignore` dosyaları yerel bağımlılıkları, derleme çıktılarını, ortam
+  dosyalarını ve SQLite dosyalarını build context'inden çıkarır.
+
+Portlar için `.env` dosyasına isteğe bağlı `BACKEND_PORT` ve `FRONTEND_PORT`
+değerleri yazılabilir; örnekler `.env.example` içindedir. Dosya boşsa yukarıdaki
+varsayılan portlar kullanılır. Yerel backend veya Vite sunucusu aynı portta
+çalışıyorsa önce onu durdurun veya Docker portlarını değiştirin.
+
+### SQLite ve migration'lar
+
+Compose, `ConnectionStrings__DefaultConnection` ayarını
+`Data Source=/app/data/dpp.db` yapar. Bu dizin `backend_data` adlı kalıcı
+volume'e bağlıdır. Docker'daki veritabanı yerel `backend/dpp.db` dosyasından
+ayrıdır; ilk çalıştırmada boş olur.
+
+`Database__MigrateOnStartup=true`, `Program.cs` içindeki başlangıç adımını
+etkinleştirir: HTTP sunucusu açılmadan önce mevcut EF migration'ları uygulanır.
+Bu, tek backend container'lı demo kurulumunda ilk açılışı kolaylaştırır;
+container içinde ayrıca `dotnet ef` çalıştırmak gerekmez. Yerel çalıştırmada
+bu ayar varsayılan olarak kapalıdır ve mevcut `dotnet ef database update`
+akışı geçerlidir.
+
+Docker hazır olduktan sonra, depo kökünden örnek veriyi yükleyin:
+
+```bash
+curl -i -F "file=@urunler_duzeltilmis_test.csv" http://localhost:5173/api/products/import
+```
+
+Beklenen sonuç `savedCount: 3`, `rejectedCount: 2` değerleridir. Ardından açın:
+
+```text
+http://localhost:5173/dpp/08690000000012
+http://localhost:5173/dpp/08690000000012.jsonld?rol=yetkili
+http://localhost:5173/dpp/08690000000012/qr.png
+```
+
+Container durumunu ve kayıtlarını görmek için:
+
+```bash
+docker compose ps
+docker compose logs -f backend frontend
+```
+
+Durdurmak için:
+
+```bash
+docker compose down
+```
+
+Bu komut SQLite volume'ünü korur. `docker compose down -v` ise volume'ü ve
+içindeki ürün/sürüm verilerini siler.
+
 ## Backend
 
 - .NET 10 / ASP.NET Core Web API
